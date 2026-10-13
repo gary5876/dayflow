@@ -1,0 +1,15 @@
+# Build output
+build/
+.gradle/
+out/
+*.class
+
+# Secrets and machine-local settings
+.env
+local.properties
+
+# OS and editors
+.DS_Store
+.idea/
+*.iml
+.vscode/
