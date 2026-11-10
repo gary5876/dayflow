@@ -7,6 +7,15 @@ import java.util.Locale;
 
 /** Prints what the parser reads from a timetable image. */
 public final class TimetableImportDemo {
+    private TimetableImportDemo() {
+    }
+
+    /**
+     * Runs the demo.
+     *
+     * @param args an optional helper path, then the image path
+     * @throws Exception if reading fails
+     */
     public static void main(String[] args) throws Exception {
         if (args.length != 1 && args.length != 2) {
             System.err.println("usage: TimetableImportDemo [dayflow-ocr helper] <timetable image>");

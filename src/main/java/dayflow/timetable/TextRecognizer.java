@@ -9,5 +9,12 @@ import java.util.List;
  * Each operating system gets its own implementation.
  */
 public interface TextRecognizer {
+    /**
+     * Reads the text of an image.
+     *
+     * @param image the image file
+     * @return the pieces of text found
+     * @throws IOException if the image cannot be read
+     */
     List<TextLine> recognize(Path image) throws IOException;
 }

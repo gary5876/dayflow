@@ -11,11 +11,20 @@ import java.util.List;
 public final class MacVisionRecognizer implements TextRecognizer {
     private final Path helper;
 
+    /**
+     * Creates the recognizer.
+     *
+     * @param helper the path of the {@code dayflow-ocr} program
+     */
     public MacVisionRecognizer(Path helper) {
         this.helper = helper;
     }
 
-    /** The helper is shipped in the same folder as the program. */
+    /**
+     * The helper is shipped in the same folder as the program.
+     *
+     * @return the expected path of the helper
+     */
     public static Path helperNextToProgram() {
         try {
             Path program = Path.of(MacVisionRecognizer.class.getProtectionDomain().getCodeSource().getLocation().toURI());

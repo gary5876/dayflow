@@ -11,9 +11,12 @@ import java.util.List;
  */
 public interface WorkPlanner {
     /**
+     * Plans the work for the open deadlines.
+     *
      * @param schedules everything on the calendar, including work blocks placed earlier
      * @param from      the first moment that may be planned (normally now)
      * @param until     the last day to plan
+     * @return the proposed work blocks and the deadlines that did not fit
      */
     Plan plan(List<Occurrence> schedules, LocalDateTime from, LocalDate until);
 }
