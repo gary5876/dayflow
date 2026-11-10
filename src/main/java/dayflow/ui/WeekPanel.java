@@ -11,13 +11,18 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Shape;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import javax.swing.BorderFactory;
@@ -29,7 +34,7 @@ import javax.swing.JScrollPane;
 
 /**
  * Week timetable: days across, hours down. Deadlines and all-day entries sit in a strip
- * under the day names; work blocks placed by the planner are drawn with a dashed border.
+ * under the day names, and work blocks placed by the planner are drawn with a dashed border.
  */
 final class WeekPanel extends JPanel {
     private static final int DEFAULT_FIRST_HOUR = 8;
@@ -45,9 +50,22 @@ final class WeekPanel extends JPanel {
     private final LocalDate today;
     private final int firstHour;
     private final int lastHour;
+    private final PanelEvents events;
+    /** What the last paint drew where, so a click can tell which entry it hit. */
+    private final List<Hit> hits = new ArrayList<>();
+    private boolean painted;
+
+    private record Hit(Rectangle area, Occurrence occurrence) {
+    }
 
     WeekPanel(List<Occurrence> schedules, LocalDate weekStart, LocalDateTime now) {
+        this(schedules, weekStart, now, PanelEvents.NONE);
+    }
+
+    /** @param events what a click on an entry or on a free time does */
+    WeekPanel(List<Occurrence> schedules, LocalDate weekStart, LocalDateTime now, PanelEvents events) {
         super(new BorderLayout());
+        this.events = events;
         this.schedules = schedules;
         this.weekStart = weekStart;
         this.today = now.toLocalDate();
@@ -65,9 +83,11 @@ final class WeekPanel extends JPanel {
         // A week that is already over cannot be planned.
         JButton plan = new JButton("Plan my week");
         plan.setEnabled(!weekStart.plusDays(6).isBefore(today));
+        plan.addActionListener(e -> events.planWeek());
         buttons.add(plan);
         JButton clear = new JButton("Clear plan");
         clear.setEnabled(status.clearable());
+        clear.addActionListener(e -> events.clearPlan());
         buttons.add(clear);
         bar.add(buttons, BorderLayout.WEST);
         // The summary can be long, so the legend is kept short and gives way to it.
@@ -83,6 +103,14 @@ final class WeekPanel extends JPanel {
         add(bar, BorderLayout.NORTH);
 
         Grid grid = new Grid();
+        if (events != PanelEvents.NONE) {
+            grid.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    clicked(grid, e);
+                }
+            });
+        }
         grid.setPreferredSize(new Dimension(600, HEADER + STRIP + (lastHour - firstHour) * HOUR_HEIGHT + 6));
         add(new JScrollPane(grid), BorderLayout.CENTER);
     }
@@ -105,6 +133,41 @@ final class WeekPanel extends JPanel {
         return minutes % 60 == 0 ? minutes / 60 + " h" : String.format("%.1f h", minutes / 60.0);
     }
 
+    /**
+     * R-WEEK-7 and R-WEEK-8. One click on an entry selects its day and the entry, two open it. Two clicks on a
+     * free time open a new schedule for that day and that half hour.
+     */
+    private void clicked(Grid grid, MouseEvent e) {
+        // A click that arrives before the first paint of a rebuilt panel would see no entries and be taken for a free time.
+        if (!painted) {
+            return;
+        }
+        Occurrence hit = null;
+        for (Hit h : hits) {
+            if (h.area().contains(e.getPoint())) {
+                hit = h.occurrence();
+            }
+        }
+        if (hit != null) {
+            if (e.getClickCount() == 1) {
+                events.select(hit, ViewState.Origin.DAY_LIST);
+                events.selectDate(hit.date());
+            } else if (e.getClickCount() == 2) {
+                events.edit(hit);
+            }
+            return;
+        }
+        int column = (grid.getWidth() - GUTTER - 2) / 7;
+        int top = HEADER + STRIP;
+        int day = (e.getX() - GUTTER) / column;
+        if (e.getClickCount() != 2 || e.getX() < GUTTER || day < 0 || day > 6 || e.getY() < top) {
+            return;
+        }
+        int minutes = firstHour * 60 + (e.getY() - top) * 60 / HOUR_HEIGHT;
+        int slot = Math.min(minutes / 30 * 30, 23 * 60 + 30);
+        events.add(weekStart.plusDays(day), LocalTime.of(slot / 60, slot % 60));
+    }
+
     private boolean inWeek(Occurrence o) {
         long day = o.date().toEpochDay() - weekStart.toEpochDay();
         return day >= 0 && day < 7;
@@ -122,6 +185,7 @@ final class WeekPanel extends JPanel {
             Font base = getFont().deriveFont(11f);
             g.setColor(Color.WHITE);
             g.fillRect(0, 0, width, getHeight());
+            hits.clear();
 
             for (int d = 0; d < 7; d++) {
                 LocalDate date = weekStart.plusDays(d);
@@ -153,11 +217,12 @@ final class WeekPanel extends JPanel {
             for (int d = 0; d < 7; d++) {
                 paintDay(g, base, weekStart.plusDays(d), GUTTER + d * column, column, top);
             }
+            painted = true;
         }
 
         /**
          * Blocks that overlap in time share the width of the day column, side by side.
-         * Only the blocks of one overlapping group are narrowed; the rest of the day keeps the full width.
+         * Only the blocks of one overlapping group are narrowed, and the rest of the day keeps the full width.
          */
         private void paintDay(Graphics2D g, Font base, LocalDate date, int x, int column, int top) {
             List<Occurrence> day = schedules.stream().filter(o -> o.timed() && o.date().equals(date))
@@ -207,7 +272,7 @@ final class WeekPanel extends JPanel {
                 boolean lastLine = i == STRIP_LINES - 1 && items.size() > STRIP_LINES;
                 String text = lastLine ? "+" + (items.size() - i) + " more"
                         : o.deadline() ? o.timeText() + " " + o.title() : o.title();
-                // Only an open deadline within two days is emphasised; an overdue open one is grey.
+                // Only an open deadline within two days is emphasised, and an overdue open one is grey.
                 boolean urgent = !lastLine && o.isOpenDeadline() && daysLeft >= 0 && daysLeft <= 2;
                 boolean overdue = !lastLine && o.isOpenDeadline() && daysLeft < 0;
                 g.setFont(urgent ? base.deriveFont(Font.BOLD) : base);
@@ -216,6 +281,9 @@ final class WeekPanel extends JPanel {
                         : urgent ? new Color(0xD93025) : o.category().color());
                 String shown = clip(text, fm, column - 10);
                 g.drawString(shown, x + 5, y);
+                if (!lastLine) {
+                    hits.add(new Hit(new Rectangle(x + 1, y - 12, column - 2, 15), o));
+                }
                 if (o.done() && !lastLine) {
                     g.drawLine(x + 5, y - 4, x + 5 + fm.stringWidth(shown), y - 4);
                 }
@@ -230,6 +298,7 @@ final class WeekPanel extends JPanel {
             int bx = x + 3;
             int bw = column - 6;
             int bh = Math.max(y2 - y1 - 2, 12);
+            hits.add(new Hit(new Rectangle(bx, y1 + 1, bw, bh), o));
             if (o.planned()) {
                 g.setColor(Color.WHITE);
                 g.fillRoundRect(bx, y1 + 1, bw, bh, 6, 6);

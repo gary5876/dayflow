@@ -26,7 +26,6 @@ import java.io.File;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,9 +42,12 @@ import javax.swing.UIManager;
 
 /**
  * Draws every screen with sample data and saves it as a PNG for the design report.
- * Usage: ScreenshotTool <output folder> <dayflow-ocr helper> <timetable image>
+ * Usage: {@code ScreenshotTool <output folder> <dayflow-ocr helper> <timetable image>}
  */
 public final class ScreenshotTool {
+    private ScreenshotTool() {
+    }
+
     private static final int SCALE = 2;
     /** Height of the title bar drawn above each window, so the window title is part of the picture. */
     private static final int TITLE_BAR = 28;
@@ -53,7 +55,7 @@ public final class ScreenshotTool {
     private static final LocalDate TO = LocalDate.of(2026, 12, 31);
     private static final String URL = "https://careers.example.com/jobs/4821";
     private static final LocalDate TODAY = SampleData.TODAY;
-    /** The clock shown in the status bar ("Saved at 10:42"); plans start from this moment. */
+    /** The clock shown in the status bar ("Saved at 10:42"), and plans start from this moment. */
     private static final LocalDateTime NOW = TODAY.atTime(10, 42);
     /** The List tab looks three months ahead by default. */
     private static final LocalDate LIST_TO = TODAY.plusMonths(3);
@@ -61,6 +63,12 @@ public final class ScreenshotTool {
 
     private static Path out;
 
+    /**
+     * Draws the screens.
+     *
+     * @param args the output folder, the helper path, and the timetable image
+     * @throws Exception if drawing or saving fails
+     */
     public static void main(String[] args) throws Exception {
         out = Path.of(args[0]);
         out.toFile().mkdirs();
@@ -165,20 +173,19 @@ public final class ScreenshotTool {
         // Schedule form: new timed schedule with an overlap, a deadline, a whole series, a work block.
         Schedule test = Schedule.timed("Coding test: Blue Cloud", LocalDate.of(2026, 10, 22), "12:30", "14:30",
                 Category.JOB).priority(Priority.HIGH).memo("Online test. Link arrives by email one hour before.\n" + URL);
-        save(new ScheduleFormDialog(calendar, "New Schedule", test, test.date(), on(data, test.date()), false, false),
+        save(new ScheduleFormDialog(calendar, ScheduleFormDialog.Use.NEW, test.toDraft(), d -> on(data, d)),
                 "ui-schedule-form.png");
         Schedule report = find(schedules, "SSD Checkpoint");
-        save(new ScheduleFormDialog(calendar, "Edit Schedule", report, report.date(), on(data, report.date()), true,
-                false), "ui-schedule-form-edit.png");
+        save(new ScheduleFormDialog(calendar, ScheduleFormDialog.Use.EDIT, report.toDraft(), d -> on(data, d, report)), "ui-schedule-form-edit.png");
         Schedule lecture = find(schedules, "Software System Design");
-        save(new ScheduleFormDialog(calendar, "Edit Schedule (all occurrences)", lecture, lecture.date(), List.of(), true,
-                false), "ui-schedule-form-repeat.png");
+        save(new ScheduleFormDialog(calendar, ScheduleFormDialog.Use.EDIT_ALL, lecture.toDraft(), d -> List.of()), "ui-schedule-form-repeat.png");
         // One date of that series: the form shows that date and has no repeat row.
         LocalDate oneClass = LocalDate.of(2026, 10, 20);
-        save(new ScheduleFormDialog(calendar, "Edit Schedule", lecture, oneClass, on(data, oneClass), true, true),
+        save(new ScheduleFormDialog(calendar, ScheduleFormDialog.Use.EDIT_ONE, oneOf(lecture, oneClass), d -> on(data, d, lecture)),
                 "ui-schedule-form-occurrence.png");
-        save(new ScheduleFormDialog(calendar, "Edit Schedule", firstBlock, firstBlock.date(),
-                on(planned, firstBlock.date()), true, false), "ui-schedule-form-work.png");
+        Schedule workBlock = firstBlock;
+        save(new ScheduleFormDialog(calendar, ScheduleFormDialog.Use.WORK_BLOCK, shownTitle(workBlock),
+                d -> on(planned, d, workBlock)), "ui-schedule-form-work.png");
 
         // Import previews.
         List<String> postingColumns = List.of("Date", "Type", "Time", "Title", "Category");
@@ -240,38 +247,8 @@ public final class ScreenshotTool {
         return from.isBefore(december) ? december : june.plusYears(1);
     }
 
-    private static int placedMinutes(Plan plan) {
-        return plan.blocks().stream()
-                .mapToInt(b -> (b.end().toSecondOfDay() - b.start().toSecondOfDay()) / 60).sum();
-    }
-
     private static ImportPreviewDialog planPreview(MainFrame owner, Plan plan, LocalDateTime from, LocalDate until) {
-        DateTimeFormatter day = DateTimeFormatter.ofPattern("EEE MMM d", Locale.ENGLISH);
-        List<Candidate> rows = new ArrayList<>();
-        for (WorkBlock b : plan.blocks()) {
-            Integer lacking = plan.shortMinutes().get(b.deadline());
-            rows.add(new Candidate(true, List.of(b.date().format(day), b.start() + "-" + b.end(),
-                    b.deadline().title(), b.deadline().date().format(day) + " " + b.deadline().timeText()),
-                    lacking == null ? "" : "Short by " + hours(lacking)));
-        }
-        plan.shortMinutes().forEach((deadline, minutes) -> {
-            if (plan.blocks().stream().noneMatch(b -> b.deadline().equals(deadline))) {
-                rows.add(new Candidate(false, false, List.of("", "", deadline.title(),
-                        deadline.date().format(day) + " " + deadline.timeText()), "No free time: short by " + hours(minutes)));
-            }
-        });
-        int missing = plan.shortMinutes().values().stream().mapToInt(Integer::intValue).sum();
-        int idle = plan.noWork().size();
-        String skipped = idle == 0 ? "" : " " + idle + (idle == 1 ? " deadline needs" : " deadlines need") + " no work.";
-        return new ImportPreviewDialog(owner, "Plan my week",
-                "<html>Plan from " + from.format(DateTimeFormatter.ofPattern("EEE MMM d HH:mm", Locale.ENGLISH))
-                        + " to " + until.format(day) + " &nbsp; <font color='#5F6368'>(" + hours(placedMinutes(plan))
-                        + " of work placed in free time)</font></html>",
-                List.of("Day", "Time", "Work for", "Due"), rows,
-                ImportPreviewDialog.options(new JLabel(missing == 0 ? "Everything fits before its deadline." + skipped
-                        : "<html><font color='#D93025'><b>" + hours(missing) + " of work does not fit.</b></font> "
-                        + "Reduce the work needed, or drop a deadline." + skipped + "</html>")),
-                "Add to timetable", 2, false);
+        return PlanPreview.dialog(owner, new WeekPlan.Proposal(from, until, plan));
     }
 
     /** The schedules with the blocks of a plan stored as work blocks. */
@@ -294,6 +271,25 @@ public final class ScreenshotTool {
 
     private static List<Occurrence> on(List<Occurrence> data, LocalDate date) {
         return data.stream().filter(o -> o.date().equals(date)).toList();
+    }
+
+    /** The schedules of a date without the one being edited, as the form shows them (R-FORM-5). */
+    private static List<Occurrence> on(List<Occurrence> data, LocalDate date, Schedule edited) {
+        return on(data, date).stream().filter(o -> o.schedule() != edited).toList();
+    }
+
+    /** A work block stores no title, and the form shows the one of its deadline (R-FORM-10). */
+    private static dayflow.model.ScheduleDraft shownTitle(Schedule block) {
+        dayflow.model.ScheduleDraft d = block.toDraft();
+        return new dayflow.model.ScheduleDraft(block.title(), d.kind(), d.date(), d.start(), d.end(), d.category(),
+                d.priority(), d.memo(), d.repeat(), d.repeatUntil(), d.workMinutes(), d.plannedFor());
+    }
+
+    /** The values of one date of a repeating schedule, as the form for that date opens (R-REP-2). */
+    private static dayflow.model.ScheduleDraft oneOf(Schedule series, LocalDate date) {
+        dayflow.model.ScheduleDraft d = series.toDraft();
+        return new dayflow.model.ScheduleDraft(d.title(), d.kind(), date, d.start(), d.end(), d.category(),
+                d.priority(), d.memo(), dayflow.model.Repeat.NONE, null, d.workMinutes(), d.plannedFor());
     }
 
     /**

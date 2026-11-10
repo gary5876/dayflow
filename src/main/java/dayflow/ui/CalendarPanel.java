@@ -9,6 +9,8 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
@@ -33,9 +35,17 @@ final class CalendarPanel extends JPanel {
     private final YearMonth month;
     private final LocalDate firstCell;
     private final JTable table;
+    private final PanelEvents events;
+    private LocalDate chosen;
 
     CalendarPanel(List<Occurrence> schedules, YearMonth month, LocalDate today) {
+        this(schedules, month, today, PanelEvents.NONE);
+    }
+
+    /** @param events what a click on a day does */
+    CalendarPanel(List<Occurrence> schedules, YearMonth month, LocalDate today, PanelEvents events) {
         super(new BorderLayout());
+        this.events = events;
         this.schedules = schedules;
         this.month = month;
         this.today = today;
@@ -53,9 +63,34 @@ final class CalendarPanel extends JPanel {
         table.setFillsViewportHeight(true);
         add(new JScrollPane(table), BorderLayout.CENTER);
         select(today);
+        if (events != PanelEvents.NONE) {
+            table.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    clicked(table.rowAtPoint(e.getPoint()), table.columnAtPoint(e.getPoint()), e.getClickCount());
+                }
+            });
+        }
+    }
+
+    /**
+     * R-CAL-6 and R-CAL-7. A click selects the day, and a grey day moves the window to its month. That
+     * redraws the calendar, so the second click of a double click lands on a new calendar, where the same
+     * place can be another day. The day to add on is then the one the first click selected.
+     */
+    private void clicked(int row, int column, int count) {
+        if (row < 0 || column < 0) {
+            return;
+        }
+        if (count == 1) {
+            events.selectDate(firstCell.plusDays(row * 7L + column));
+        } else if (count == 2 && chosen != null) {
+            events.add(chosen, null);
+        }
     }
 
     void select(LocalDate date) {
+        chosen = date;
         int index = (int) ChronoUnit.DAYS.between(firstCell, date);
         if (index >= 0 && index < 42) {
             table.changeSelection(index / 7, index % 7, false, false);
@@ -136,7 +171,7 @@ final class CalendarPanel extends JPanel {
                 long daysLeft = ChronoUnit.DAYS.between(today, date);
                 boolean urgent = open > 0 && daysLeft >= 0 && daysLeft <= 2;
                 g.setFont(base.deriveFont(urgent ? Font.BOLD : Font.PLAIN));
-                // Grey when nothing is left to do or the date has passed; red only within two days.
+                // Grey when nothing is left to do or the date has passed, red only within two days.
                 g.setColor(open == 0 || daysLeft < 0 ? new Color(0x9AA0A6)
                         : urgent ? new Color(0xD93025) : new Color(0xB06000));
                 String text = deadlines + (deadlines == 1 ? " deadline" : " deadlines")
