@@ -43,5 +43,47 @@ tasks.register<Exec>("ocrHelper") {
     val binary = layout.buildDirectory.file("dayflow-ocr")
     inputs.file(source)
     outputs.file(binary)
-    commandLine("swiftc", "-O", source.asFile.path, "-o", binary.get().asFile.path)
+    // A universal binary for macOS 13 or later. Vision text recognition with Korean needs request revision 3,
+    // which is macOS 13, and ocr.swift uses nothing newer. Each architecture is built apart, then joined.
+    val out = binary.get().asFile.path
+    commandLine(
+        "sh", "-c",
+        "set -e && swiftc -O -target arm64-apple-macos13 \"\$1\" -o \"\$2.arm64\" && " +
+            "swiftc -O -target x86_64-apple-macos13 \"\$1\" -o \"\$2.x86_64\" && " +
+            "lipo -create -output \"\$2\" \"\$2.arm64\" \"\$2.x86_64\" && rm -f \"\$2.arm64\" \"\$2.x86_64\"",
+        "sh", source.asFile.path, out,
+    )
+}
+
+tasks.jar {
+    archiveFileName = "DayFlow.jar"
+    manifest {
+        attributes("Main-Class" to "dayflow.ui.DayFlowApp")
+    }
+}
+
+tasks.javadoc {
+    options.encoding = "UTF-8"
+    (options as StandardJavadocDocletOptions).apply {
+        charSet = "UTF-8"
+        docEncoding = "UTF-8"
+        windowTitle = "DayFlow API"
+        docTitle = "DayFlow API"
+        addStringOption("Xmaxwarns", "1000")
+    }
+}
+
+// Puts the text recognition helper next to DayFlow.jar so that running from build/libs finds it.
+// Off macOS there is no swiftc, so the copy is skipped and the build still passes.
+val copyHelper = tasks.register<Copy>("copyHelper") {
+    onlyIf { org.gradle.internal.os.OperatingSystem.current().isMacOsX }
+    dependsOn("ocrHelper")
+    from(layout.buildDirectory.file("dayflow-ocr"))
+    into(layout.buildDirectory.dir("libs"))
+}
+
+tasks.assemble {
+    if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+        dependsOn(copyHelper)
+    }
 }

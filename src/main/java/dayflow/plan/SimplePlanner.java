@@ -13,9 +13,13 @@ import java.util.Map;
 /**
  * First, simple placement rule: take the deadlines in order of due time and give each one
  * the earliest free half-hour slots before it is due.
- * A provisional rule; a better one can replace it behind {@link WorkPlanner}.
+ * A provisional rule. A better one can replace it behind {@link WorkPlanner}.
  */
 public final class SimplePlanner implements WorkPlanner {
+    /** Creates the planner. */
+    public SimplePlanner() {
+    }
+
     private static final int SLOT_MINUTES = 30;
     private static final LocalTime DAY_START = LocalTime.of(9, 0);
     private static final LocalTime DAY_END = LocalTime.of(22, 0);
@@ -99,8 +103,8 @@ public final class SimplePlanner implements WorkPlanner {
 
     /**
      * Work still to place: the estimate minus the work blocks for this deadline that are kept.
-     * Kept are the blocks that have already started and the blocks after the planned period;
-     * the unstarted blocks inside the period are replaced by the new plan.
+     * Kept are the blocks that have already started and the blocks after the planned period.
+     * The unstarted blocks inside the period are replaced by the new plan.
      */
     static int remainingMinutes(Occurrence deadline, List<Occurrence> schedules, LocalDateTime from, LocalDate until) {
         int kept = schedules.stream()

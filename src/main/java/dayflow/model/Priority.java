@@ -1,7 +1,13 @@
 package dayflow.model;
 
+/** How important a schedule is to the user. */
 public enum Priority {
-    HIGH("High"), MEDIUM("Medium"), LOW("Low");
+    /** Needs attention first. */
+    HIGH("High"),
+    /** The default importance. */
+    MEDIUM("Medium"),
+    /** Can wait. */
+    LOW("Low");
 
     private final String label;
 

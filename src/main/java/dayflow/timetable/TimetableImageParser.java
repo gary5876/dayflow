@@ -21,16 +21,31 @@ import javax.imageio.ImageIO;
  * Only the words (course, professor, room, day and hour labels) come from text recognition.
  */
 public final class TimetableImageParser {
+    /** The reason of the exception when the hour labels cannot be read, so the window can tell it from the others. */
+    public static final String HOURS_UNREADABLE = "The hour labels could not be read.";
     private static final String DAY_LABELS = "월화수목금토일";
     private static final Pattern HOUR_LABEL = Pattern.compile("(\\d{1,2})\\s*시");
     private static final int MINUTE_STEP = 5;
 
     private final TextRecognizer recognizer;
 
+    /**
+     * Creates the parser.
+     *
+     * @param recognizer reads the text of the image
+     */
     public TimetableImageParser(TextRecognizer recognizer) {
         this.recognizer = recognizer;
     }
 
+    /**
+     * Reads the classes in a timetable image.
+     *
+     * @param imagePath the image file
+     * @return the class blocks
+     * @throws IOException if the image cannot be read
+     * @throws TimetableFormatException if the image is not an Everytime timetable
+     */
     public List<ClassBlock> parse(Path imagePath) throws IOException, TimetableFormatException {
         BufferedImage image = ImageIO.read(imagePath.toFile());
         if (image == null) {
@@ -61,7 +76,7 @@ public final class TimetableImageParser {
         return blocks;
     }
 
-    /** Grid lines of the timetable; the first column holds hour labels and the first row day labels. */
+    /** Grid lines of the timetable. The first column holds hour labels and the first row day labels. */
     private record Grid(int lineColor, List<Integer> columnLines, List<Integer> rowLines) {
         int headerBottom() {
             return rowLines.get(0);
@@ -128,7 +143,7 @@ public final class TimetableImageParser {
                 return Integer.parseInt(m.group(1)) - row;
             }
         }
-        throw new TimetableFormatException("The hour labels could not be read.");
+        throw new TimetableFormatException(HOURS_UNREADABLE);
     }
 
     private static DayOfWeek findDay(Grid grid, List<TextLine> texts, int left, int right, int column) {
@@ -163,7 +178,7 @@ public final class TimetableImageParser {
         return blocks;
     }
 
-    /** Blocks are pastel colours; the background, header, and grid lines are pure greys. */
+    /** Blocks are pastel colours, and the background, header, and grid lines are pure greys. */
     private static boolean isBlockColor(int rgb, int lineColor) {
         if (rgb == lineColor) {
             return false;

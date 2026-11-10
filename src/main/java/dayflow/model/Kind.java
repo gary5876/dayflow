@@ -4,7 +4,7 @@ package dayflow.model;
 public enum Kind {
     /** From a start time to an end time. */
     TIMED("Timed"),
-    /** Something to finish by a due time; can be marked as done. */
+    /** Something to finish by a due time. Can be marked as done. */
     DEADLINE("Deadline"),
     /** A date without a time, such as a result announcement. */
     ALL_DAY("All day");

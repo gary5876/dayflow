@@ -19,6 +19,14 @@ import java.util.List;
 public record PlanStatus(int plannedMinutes, int unplannedMinutes, int unplannedDeadlines,
                          boolean outOfDate, boolean clearable) {
 
+    /**
+     * Computes the status of one week.
+     *
+     * @param schedules everything on the calendar
+     * @param weekStart the first day of the week
+     * @param now the current moment
+     * @return the status
+     */
     public static PlanStatus of(List<Occurrence> schedules, LocalDate weekStart, LocalDateTime now) {
         LocalDate weekEnd = weekStart.plusDays(6);
         List<Occurrence> blocks = schedules.stream()
@@ -47,7 +55,11 @@ public record PlanStatus(int plannedMinutes, int unplannedMinutes, int unplanned
                 outOfDate, !unstarted.isEmpty());
     }
 
-    /** True when the week has any work block, which is when the summary is shown at all. */
+    /**
+     * True when the week has any work block, which is when the summary is shown at all.
+     *
+     * @return whether the week has a plan
+     */
     public boolean hasPlan() {
         return plannedMinutes > 0;
     }
