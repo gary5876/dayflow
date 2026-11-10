@@ -2,8 +2,16 @@ package dayflow.model;
 
 import java.time.LocalDate;
 
+/** How a schedule repeats. */
 public enum Repeat {
-    NONE("None"), DAILY("Daily"), WEEKLY("Weekly"), MONTHLY("Monthly");
+    /** Happens once. */
+    NONE("None"),
+    /** Happens every day. */
+    DAILY("Daily"),
+    /** Happens every week on the same weekday. */
+    WEEKLY("Weekly"),
+    /** Happens every month on the same day of the month. */
+    MONTHLY("Monthly");
 
     private final String label;
 
